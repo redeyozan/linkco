@@ -2,65 +2,86 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>URL Shortener</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-white text-gray-900 flex items-center justify-center min-h-screen p-4">
-  <div class="w-full max-w-md">
-    <h1 class="text-2xl font-semibold mb-6 text-center">URL Shortener</h1>
-    <div class="space-y-4">
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+  <div class="w-full max-w-md bg-white p-6 rounded-lg shadow">
+    <h1 class="text-2xl font-bold mb-4 text-center">URL Shortener</h1>
+    <div class="space-y-3">
       <input id="originalUrl" type="url" placeholder="Enter URL to shorten"
-             class="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring" />
+             class="w-full p-2 border rounded" />
       <input id="alias" type="text" placeholder="Custom alias (optional)"
-             class="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring" />
-      <button id="convertBtn"
-              class="w-full py-3 bg-gray-800 text-white rounded hover:bg-gray-700 transition">
+             class="w-full p-2 border rounded" />
+      <button id="convertBtn" class="w-full py-2 bg-blue-600 text-white rounded">
         Generate Short URL
       </button>
     </div>
-    <div id="result" class="mt-6 text-center"></div>
-    <div id="history" class="mt-8">
-      <h2 class="text-xl mb-2">History (last 7 days)</h2>
+    <div id="result" class="mt-4 text-center"></div>
+    <div id="history" class="mt-6">
+      <h2 class="text-lg font-semibold mb-2">Your History (7 days)</h2>
       <ul id="historyList" class="space-y-1 text-sm text-gray-700"></ul>
     </div>
   </div>
 
   <script>
-    const originalUrlInput = document.getElementById('originalUrl');
-    const aliasInput = document.getElementById('alias');
-    const resultDiv = document.getElementById('result');
-    const historyList = document.getElementById('historyList');
+    const originalInput = document.getElementById('originalUrl');
+    const aliasInput    = document.getElementById('alias');
+    const resultDiv     = document.getElementById('result');
+    const historyUl     = document.getElementById('historyList');
 
-    async function fetchHistory() {
-      const res = await fetch('/api/history');
-      const data = await res.json();
-      historyList.innerHTML = data
-        .map(u => `<li><a href=\"${window.location.origin}/${u.slug}\" target=\"_blank\" class=\"underline\">${window.location.origin}/${u.slug}</a></li>`)  
-        .join('');
+    const STORAGE_KEY = 'shortener_history';
+
+    function loadHistory() {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      // Keep only last 7 days
+      const valid = data.filter(item => item.timestamp >= cutoff);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
+      return valid;
+    }
+
+    function renderHistory() {
+      const items = loadHistory();
+      historyUl.innerHTML = items.map(i =>
+        `<li><a href="${i.shortUrl}" target="_blank" class="underline">${i.shortUrl}</a></li>`
+      ).join('');
     }
 
     document.getElementById('convertBtn').addEventListener('click', async () => {
-      const originalUrl = originalUrlInput.value;
-      const alias = aliasInput.value;
-      if (!originalUrl) return alert('Please enter a URL');
+      const originalUrl = originalInput.value;
+      const alias       = aliasInput.value;
+      if (!originalUrl) return alert('Please enter a URL.');
+
       const res = await fetch('/api/shorten', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ originalUrl, alias })
       });
       const data = await res.json();
+
       if (data.error) {
-        resultDiv.innerHTML = `<p class=\"text-red-600\">${data.error}</p>`;
+        resultDiv.textContent = data.error;
+        resultDiv.className = 'text-red-500';
       } else {
-        resultDiv.innerHTML = `<p>Short URL: <a href=\"${data.shortUrl}\" target=\"_blank\" class=\"underline text-blue-600\">${data.shortUrl}</a></p>`;
-        originalUrlInput.value = '';
+        resultDiv.innerHTML = `
+          <p>Short URL: <a href="${data.shortUrl}" target="_blank" class="underline text-blue-600">${data.shortUrl}</a></p>
+        `;
+        // Save to localStorage
+        const hist = loadHistory();
+        hist.unshift({ shortUrl: data.shortUrl, timestamp: Date.now() });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(hist));
+        // Clear inputs
+        originalInput.value = '';
         aliasInput.value = '';
-        fetchHistory();
+        // Re-render history
+        renderHistory();
       }
     });
 
-    fetchHistory();
+    // Render on load
+    renderHistory();
   </script>
 </body>
 </html>
